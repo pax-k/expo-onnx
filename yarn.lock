@@ -1970,7 +1970,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@expo/metro-config@npm:~0.10.0":
+"@expo/metro-config@npm:^0.10.7, @expo/metro-config@npm:~0.10.0":
   version: 0.10.7
   resolution: "@expo/metro-config@npm:0.10.7"
   dependencies:
@@ -4784,6 +4784,7 @@ __metadata:
     "@babel/core": "npm:^7.19.3"
     "@babel/plugin-proposal-export-namespace-from": "npm:^7.18.9"
     "@craftzdog/react-native-buffer": "npm:^6.0.5"
+    "@expo/metro-config": "npm:^0.10.7"
     "@types/react": "npm:~18.2.14"
     "@types/react-native": "npm:~0.70.6"
     "@xenova/transformers": "https://github.com/hans00/transformers.js.git#merge"
@@ -4791,6 +4792,7 @@ __metadata:
     browserify-zlib: "npm:^0.2.0"
     events: "npm:^3.3.0"
     expo: "npm:^49.0.3"
+    expo-asset: "npm:~8.10.1"
     expo-splash-screen: "npm:~0.20.5"
     expo-status-bar: "npm:~1.6.0"
     node-fetch: "npm:^2.6.7"

@@ -1,9 +1,11 @@
 {
   "dependencies": {
+    "@expo/metro-config": "^0.10.7",
     "@xenova/transformers": "https://github.com/hans00/transformers.js.git#merge",
     "browserify-zlib": "^0.2.0",
     "events": "^3.3.0",
     "expo": "^49.0.3",
+    "expo-asset": "~8.10.1",
     "expo-splash-screen": "~0.20.5",
     "expo-status-bar": "~1.6.0",
     "node-fetch": "^2.6.7",

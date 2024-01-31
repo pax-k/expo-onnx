@@ -1,162 +1,143 @@
-/* eslint-disable import/namespace */
-
-import * as ort from "onnxruntime-react-native";
-import { PreTrainedTokenizer, Tensor } from "@xenova/transformers";
+import { InferenceSession, TypedTensor } from "onnxruntime-react-native";
+import { BertTokenizer } from "@xenova/transformers";
 import { Asset } from "expo-asset";
 import tokenizerJson from "./assets/models/all-MiniLM-L6-v2/tokenizer.json";
 import tokenizerConfigJson from "./assets/models/all-MiniLM-L6-v2/tokenizer_config.json";
 
-function getEmbeddings(
-  data: number[],
-  dimensions: [number, number, number]
-): number[][] {
-  const [x, y, z] = dimensions;
-
-  return Array.from({ length: x }, (_, index) => {
-    const startIndex = index * y * z;
-    const endIndex = startIndex + z;
-    return data.slice(startIndex, endIndex);
-  });
+function cosineSimilarity(vecA: number[], vecB: number[]) {
+  let dotProduct = 0.0;
+  let normA = 0.0;
+  let normB = 0.0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-function normalize(v: number[]): number[] {
-  const norm = Math.sqrt(v.reduce((acc, val) => acc + val * val, 0));
-  const epsilon = 1e-12;
+function euclideanDistance(vecA, vecB) {
+  let sum = 0;
 
-  return v.map((val) => val / Math.max(norm, epsilon));
+  for (let i = 0; i < vecA.length; i++) {
+    sum += (vecA[i] - vecB[i]) ** 2;
+  }
+
+  return Math.sqrt(sum);
 }
 
-export class MiniLMEmbeddings {
-  private model: ort.InferenceSession;
-  private tokenizer: PreTrainedTokenizer;
-  public static readonly modelName = "all-MiniLM-L6-v2";
+function manhattanDistance(vecA, vecB) {
+  let sum = 0;
 
-  private constructor(
-    model: ort.InferenceSession,
-    tokenizer: PreTrainedTokenizer
-  ) {
-    this.model = model;
-    this.tokenizer = tokenizer;
+  for (let i = 0; i < vecA.length; i++) {
+    sum += Math.abs(vecA[i] - vecB[i]);
   }
 
-  public static async init() {
-    try {
-      const modelAsset = await Asset.loadAsync(
-        require("./assets/models/all-MiniLM-L6-v2/onnx/model.onnx")
-      );
-      const modelUri = modelAsset[0].localUri;
-      if (!modelUri) {
-        throw new Error("Model not found");
-      }
+  return sum;
+}
 
-      const model = await ort.InferenceSession.create(modelUri);
-      const tokenizer = new PreTrainedTokenizer(
-        tokenizerJson,
-        tokenizerConfigJson
-      );
+export async function embed() {
+  // Define the query and sentences
+  const query = "I work at Kin";
+  const sentences = [
+    "thomas works at Kin",
+    "kenji works at Kin",
+    "Christopher works at-> Kin",
+    "Me co-founded Kin",
+    "Andrei works at Kin",
+    "Me is cto of Kin",
+    "Volodymyr works at Kin",
+    "Me reached at kin feature freeze",
+    "Me vents to Kin",
+    "0.1.1 version of Kin",
+    "Kin offers help Me",
+    "0.1.4 version of Kin",
+    "Kin requires responsibility",
+    "Me looks for in candidates align with Kin's values",
+    "Kin values transparency and trustworthiness",
+    "Me works at Kin",
+    "I work at Kin",
+    "Me works at Kin",
+  ];
 
-      console.log("Model loaded successfully:", this.modelName);
+  // Load the ONNX model
+  const modelAsset = await Asset.loadAsync(
+    require("./assets/models/all-MiniLM-L6-v2/onnx/model.onnx")
+  );
+  const { localUri } = modelAsset[0];
+  const session = await InferenceSession.create(localUri);
 
-      return new MiniLMEmbeddings(model, tokenizer);
-    } catch (err) {
-      console.error(`Failed to load model: ${err}`);
-      throw err;
-    }
-  }
+  // const tokenizer = new PreTrainedTokenizer(tokenizerJson, tokenizerConfigJson);
+  const tokenizer = new BertTokenizer(tokenizerJson, tokenizerConfigJson);
 
-  async embed(textString: string): Promise<number[]> {
-    try {
-      let encodedText = this.tokenizer._call(textString, {
-        truncation: false,
-        // padding: true,
-        // truncation: true,
-        // return_tensor: false,
-      }) as Record<string, Tensor>;
+  const prepareInput = (text) => {
+    const model_inputs = tokenizer._call(text, {
+      padding: true,
+      truncation: true,
+    });
 
-      console.log("encodedText", encodedText);
+    return model_inputs;
+  };
 
-      const ids = Object.values(encodedText.input_ids.data).map((bigIntValue) =>
-        BigInt(bigIntValue)
-      );
+  const queryInput = prepareInput(query);
+  const sentenceInputs = sentences.map(prepareInput);
 
-      const mask = Object.values(encodedText.attention_mask.data).map(
-        (bigIntValue) => BigInt(bigIntValue)
-      );
+  // Function to extract embeddings
+  const extractEmbedding = async (input: {
+    input_ids: TypedTensor<"int64">;
+    attention_mask: TypedTensor<"int64">;
+    token_type_ids: TypedTensor<"int64">;
+  }) => {
+    let output = await session.run(input);
+    // output = mean_pooling(output.last_hidden_state, input.attention_mask);
+    // output = output.normalize(2, -1);
+    // @ts-ignore
+    return Array.from(output.last_hidden_state.data);
+  };
 
-      const token_type_ids = encodedText.attention_mask.clone();
-      token_type_ids.data.fill(0n);
+  // Compute embeddings
+  const queryEmbedding = await extractEmbedding(queryInput);
 
-      const tokenType = Object.values(token_type_ids.data).map((bigIntValue) =>
-        BigInt(bigIntValue)
-      );
+  const sentenceEmbeddings = await Promise.all(
+    sentenceInputs.map(extractEmbedding)
+  );
 
-      const maxLength = encodedText.input_ids.data.length;
+  // Compute cosine similarities
+  const cosineScores = sentenceEmbeddings.map((sentenceEmbedding) =>
+    // @ts-ignore
+    cosineSimilarity(queryEmbedding, sentenceEmbedding)
+  );
 
-      // Padding to ensure all arrays are of equal length
-      while (ids.length < maxLength) {
-        ids.push(0n);
-        mask.push(0n);
-        tokenType.push(0n);
-      }
+  const euclideanDistanceScores = sentenceEmbeddings.map((sentenceEmbedding) =>
+    // @ts-ignore
+    euclideanDistance(queryEmbedding, sentenceEmbedding)
+  );
 
-      const batchInputIds = new ort.Tensor(
-        "int64",
-        ids.flat() as unknown as number[],
-        [1, maxLength]
-      );
+  const manhattanDistanceScores = sentenceEmbeddings.map((sentenceEmbedding) =>
+    // @ts-ignore
+    manhattanDistance(queryEmbedding, sentenceEmbedding)
+  );
 
-      const batchAttentionMask = new ort.Tensor(
-        "int64",
-        mask.flat() as unknown as number[],
-        [1, maxLength]
-      );
-
-      const batchTokenTypeId = new ort.Tensor(
-        "int64",
-        tokenType.flat() as unknown as number[],
-        [1, maxLength]
-      );
-
-      const inputs = {
-        input_ids: batchInputIds,
-        attention_mask: batchAttentionMask,
-        token_type_ids: batchTokenTypeId,
-      };
-
-      // end preparing input
-
-      // start model execution
-      const output = await this.model.run(inputs);
-
-      // output = mean_pooling(output, inputs.attention_mask);
-
-      console.log(
-        "output.last_hidden_state.data",
-        output.last_hidden_state.data
-      );
-
-      const embeddings = getEmbeddings(
-        output.last_hidden_state.data as unknown[] as number[],
-        output.last_hidden_state.dims as [number, number, number]
-      );
-
-      // end model execution
-
-      console.log("length", embeddings[0].length);
-      return embeddings[0];
-      // return normalize(embeddings[0]);
-    } catch (err) {
-      console.error(`Failed to embed text: ${err}`);
-      throw err;
-    }
-  }
-
-  // eslint-disable-next-line class-methods-use-this
-  vectorOptions() {
+  // Combine sentences with their scores and sort by similarity
+  const sentenceScorePairs = sentences.map((sentence, index) => {
+    console.log(sentenceInputs[index].input_ids);
     return {
-      dimensions: 384,
-      efConstruction: 16,
-      maxConnections: 32,
+      sentence: sentence,
+      cosineScore: cosineScores[index],
+      euclideanDistanceScores: euclideanDistanceScores[index],
+      manhattanDistanceScores: manhattanDistanceScores[index],
+      embeddings: sentenceEmbeddings[index],
     };
-  }
+  });
+
+  const sortedSentences = sentenceScorePairs.sort(
+    (a, b) => b.cosineScore - a.cosineScore
+  );
+
+  // Output the sorted sentences with their similarity scores
+  sortedSentences.forEach((pair) => {
+    console.log(`${pair.sentence}, ${pair.cosineScore}`);
+  });
+
+  console.log("sortedSentences", JSON.stringify(sortedSentences));
 }

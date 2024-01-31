@@ -14,6 +14,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.paxx.expotransformers"
-    }
+    },
+    "jsEngine": "hermes"
   }
 }

@@ -33,13 +33,13 @@ export async function embed() {
 
   // Compute embeddings for the query and all sentences
   const queryEmbedding = await extractor([query], {
-    pooling: "mean",
-    normalize: true,
+    pooling: "none",
+    normalize: false,
   });
 
   const sentenceEmbeddings = await Promise.all(
     sentences.map((sentence) =>
-      extractor([sentence], { pooling: "mean", normalize: true })
+      extractor([sentence], { pooling: "none", normalize: false })
     )
   );
 
@@ -52,6 +52,7 @@ export async function embed() {
   const sentenceScorePairs = sentences.map((sentence, index) => ({
     sentence: sentence,
     score: cosineScores[index],
+    embeddings: Array.from(sentenceEmbeddings[index][0].data),
   }));
 
   const sortedSentences = sentenceScorePairs.sort((a, b) => b.score - a.score);
@@ -60,4 +61,5 @@ export async function embed() {
   sortedSentences.forEach((pair) => {
     console.log(`${pair.sentence}, ${pair.score}`);
   });
+  console.log("sortedSentences", JSON.stringify(sortedSentences));
 }
